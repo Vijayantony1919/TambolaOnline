@@ -1,199 +1,61 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { GameState, GameStatus, Player, generateTicket, generateBotPlayer, INITIAL_GAME_STATE } from './game-logic';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useWebSocket } from './websocket';
+import type { GameRoom, GamePlayer } from '@shared/schema';
 
-type Action =
-  | { type: 'SELECT_MODE'; mode: 'solo' | 'friends' }
-  | { type: 'CREATE_ROOM' }
-  | { type: 'JOIN_ROOM'; code: string }
-  | { type: 'START_GAME' }
-  | { type: 'TICK' } // Timer tick for drawing numbers
-  | { type: 'MARK_CELL'; playerId: string; ticketIndex: number; rowIndex: number; colIndex: number }
-  | { type: 'ADD_BOT' }
-  | { type: 'RESET' };
+type GameMode = 'solo' | 'friends';
+type GameStatus = 'mode-selection' | 'create-room' | 'lobby' | 'countdown' | 'running' | 'ended';
 
-const GameContext = createContext<{
-  state: GameState;
-  dispatch: React.Dispatch<Action>;
-} | null>(null);
-
-function gameReducer(state: GameState, action: Action): GameState {
-  switch (action.type) {
-    case 'SELECT_MODE':
-      return {
-        ...state,
-        mode: action.mode,
-        status: action.mode === 'solo' ? 'lobby' : 'create-room', // Simplify: friends mode goes to create/join choice
-      };
-    
-    case 'CREATE_ROOM':
-      return {
-        ...state,
-        status: 'lobby',
-        roomCode: Math.floor(1000 + Math.random() * 9000).toString(),
-        hostId: 'user',
-      };
-
-    case 'JOIN_ROOM':
-      return {
-        ...state,
-        status: 'lobby',
-        roomCode: action.code,
-        hostId: 'other', // In a real app this would be dynamic
-      };
-
-    case 'START_GAME':
-      return {
-        ...state,
-        status: 'countdown',
-        calledNumbers: [],
-        currentNumber: null,
-      };
-
-    case 'TICK':
-      if (state.status === 'countdown') {
-        // Transition to running after brief countdown (mocked here by just switching)
-        return { ...state, status: 'running' };
-      }
-      
-      if (state.status !== 'running') return state;
-
-      // Draw a new number
-      const available = Array.from({ length: 90 }, (_, i) => i + 1).filter(
-        n => !state.calledNumbers.includes(n)
-      );
-
-      if (available.length === 0) {
-        return { ...state, status: 'ended' };
-      }
-
-      const nextNum = available[Math.floor(Math.random() * available.length)];
-      return {
-        ...state,
-        currentNumber: nextNum,
-        calledNumbers: [nextNum, ...state.calledNumbers], // Prepend for recent list
-      };
-
-    case 'MARK_CELL': {
-      // Deep clone to update nested ticket state
-      const players = [...state.players];
-      const playerIdx = players.findIndex(p => p.id === action.playerId);
-      if (playerIdx === -1) return state;
-
-      const player = { ...players[playerIdx] };
-      player.tickets = [...player.tickets];
-      const ticket = [...player.tickets[action.ticketIndex]];
-      
-      // Toggle mark
-      const cell = ticket[action.rowIndex][action.colIndex];
-      if (cell) {
-        ticket[action.rowIndex][action.colIndex] = { ...cell, marked: !cell.marked };
-      }
-      
-      player.tickets[action.ticketIndex] = ticket as any;
-      players[playerIdx] = player;
-      
-      return { ...state, players };
-    }
-
-    case 'ADD_BOT':
-      return {
-        ...state,
-        players: [...state.players, generateBotPlayer(`bot-${Date.now()}`, `Player ${state.players.length + 1}`)],
-      };
-
-    case 'RESET':
-      return {
-        ...INITIAL_GAME_STATE,
-        players: state.players.map(p => ({ ...p, tickets: [generateTicket()] })), // Regen tickets
-      };
-
-    default:
-      return state;
-  }
+interface LocalGameState {
+  status: GameStatus;
+  mode: GameMode;
+  myPlayerId: string | null;
 }
 
+const GameContext = createContext<{
+  localState: LocalGameState;
+  room: GameRoom | null;
+  players: GamePlayer[];
+  myPlayer: GamePlayer | null;
+  connected: boolean;
+  selectMode: (mode: GameMode) => void;
+  createRoom: (playerName: string) => void;
+  joinRoom: (roomCode: string, playerName: string) => void;
+  startGame: () => void;
+  markCell: (playerId: string, ticketIndex: number, rowIndex: number, colIndex: number) => void;
+  reset: () => void;
+} | null>(null);
+
 export function GameProvider({ children }: { children: React.ReactNode }) {
-  // Initialize with one human player
-  const [state, dispatch] = useReducer(gameReducer, {
-    ...INITIAL_GAME_STATE,
-    players: [{ 
-      id: 'user', 
-      name: 'You', 
-      isBot: false, 
-      tickets: [generateTicket()],
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=You' 
-    }],
+  const { send, gameState, connected } = useWebSocket();
+  const [localState, setLocalState] = useState<LocalGameState>({
+    status: 'mode-selection',
+    mode: 'solo',
+    myPlayerId: null,
   });
 
-  // Game Loop
+  // Sync room status with local state
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (state.status === 'running') {
-      interval = setInterval(() => {
-        dispatch({ type: 'TICK' });
-      }, state.callIntervalMs);
-    } else if (state.status === 'countdown') {
-       // Quick countdown transition
-       setTimeout(() => dispatch({ type: 'TICK' }), 3000);
-    }
-
-    return () => clearInterval(interval);
-  }, [state.status, state.callIntervalMs]);
-
-  // Multiplayer Simulation Effect
-  useEffect(() => {
-    // If we are in a lobby in 'friends' mode
-    if (state.status === 'lobby' && state.mode === 'friends') {
+    if (gameState.room) {
+      const status = gameState.room.status as GameStatus;
+      setLocalState(prev => ({ ...prev, status }));
       
-      // SCENARIO 1: YOU ARE HOST (Created Room)
-      // Simulate players joining you
-      if (state.hostId === 'user') {
-         const timeouts: NodeJS.Timeout[] = [];
-         
-         // Friend 1 joins after 2 seconds
-         if (state.players.length === 1) {
-           timeouts.push(setTimeout(() => {
-             dispatch({ type: 'ADD_BOT' }); // Re-using add bot to sim friend
-             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'); // Pop sound
-             audio.volume = 0.5;
-             audio.play().catch(() => {});
-           }, 2500));
-         }
-         
-         // Friend 2 joins after 5 seconds
-         if (state.players.length <= 2) {
-            timeouts.push(setTimeout(() => {
-             dispatch({ type: 'ADD_BOT' });
-             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
-             audio.volume = 0.5;
-             audio.play().catch(() => {});
-           }, 5000));
-         }
-
-         return () => timeouts.forEach(clearTimeout);
-      }
-      
-      // SCENARIO 2: YOU JOINED SOMEONE (Joined Room)
-      // Simulate that a Host is already there if we are alone
-      if (state.hostId === 'other' && state.players.length === 1) {
-         // Immediate effect to show host
-         dispatch({ type: 'ADD_BOT' }); // Simulating the host
+      // Auto-set my player ID if not set
+      if (!localState.myPlayerId && gameState.players.length > 0) {
+        setLocalState(prev => ({ 
+          ...prev, 
+          myPlayerId: gameState.players[0].id 
+        }));
       }
     }
-  }, [state.status, state.mode, state.players.length, state.hostId]);
+  }, [gameState.room?.status, gameState.players.length]);
 
-  // Voice Synthesis Effect
+  // Voice synthesis for number calling
   useEffect(() => {
-    if (state.currentNumber && state.status === 'running') {
-      const text = state.currentNumber.toString();
-      
-      // Cancel any ongoing speech
+    if (gameState.room?.currentNumber && gameState.room?.status === 'running') {
+      const text = gameState.room.currentNumber.toString();
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Attempt to select a female voice
       const voices = window.speechSynthesis.getVoices();
       const preferredVoice = voices.find(
         v => v.name.includes('Google US English') || 
@@ -205,15 +67,72 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         utterance.voice = preferredVoice;
       }
       
-      utterance.rate = 0.8; // Slower rate
-      utterance.pitch = 1.1; // Slightly higher pitch often sounds friendlier
+      utterance.rate = 0.8;
+      utterance.pitch = 1.1;
       
       window.speechSynthesis.speak(utterance);
     }
-  }, [state.currentNumber, state.status]);
+  }, [gameState.room?.currentNumber]);
+
+  const selectMode = (mode: GameMode) => {
+    setLocalState({
+      status: mode === 'solo' ? 'lobby' : 'create-room',
+      mode,
+      myPlayerId: null,
+    });
+  };
+
+  const createRoom = (playerName: string) => {
+    send({ type: 'create_room', playerName });
+  };
+
+  const joinRoom = (roomCode: string, playerName: string) => {
+    send({ type: 'join_room', roomCode, playerName });
+  };
+
+  const startGame = () => {
+    if (gameState.room) {
+      send({ type: 'start_game', roomCode: gameState.room.roomCode });
+    }
+  };
+
+  const markCell = (playerId: string, ticketIndex: number, rowIndex: number, colIndex: number) => {
+    if (gameState.room) {
+      send({
+        type: 'mark_cell',
+        roomCode: gameState.room.roomCode,
+        playerId,
+        ticketIndex,
+        rowIndex,
+        colIndex,
+      });
+    }
+  };
+
+  const reset = () => {
+    setLocalState({
+      status: 'mode-selection',
+      mode: 'solo',
+      myPlayerId: null,
+    });
+  };
+
+  const myPlayer = gameState.players.find(p => p.id === localState.myPlayerId) || null;
 
   return (
-    <GameContext.Provider value={{ state, dispatch }}>
+    <GameContext.Provider value={{
+      localState,
+      room: gameState.room,
+      players: gameState.players,
+      myPlayer,
+      connected,
+      selectMode,
+      createRoom,
+      joinRoom,
+      startGame,
+      markCell,
+      reset,
+    }}>
       {children}
     </GameContext.Provider>
   );

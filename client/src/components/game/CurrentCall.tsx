@@ -1,10 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useGame } from '@/lib/game-context';
 
-export function CurrentCall() {
-  const { state } = useGame();
-  const current = state.currentNumber;
-  const recent = state.calledNumbers.slice(1, 6); // Previous 5 numbers
+interface CurrentCallProps {
+  currentNumber: number | null;
+  calledNumbers: number[];
+}
+
+export function CurrentCall({ currentNumber, calledNumbers }: CurrentCallProps) {
+  const current = currentNumber;
+  const recent = calledNumbers.slice(1, 6); // Previous 5 numbers
 
   return (
     <div className="flex flex-col items-center justify-center py-6 sm:py-10">
@@ -44,7 +47,7 @@ export function CurrentCall() {
       <div className="mt-6 flex items-center gap-2 h-10">
         <span className="text-xs font-semibold text-muted-foreground mr-2">PREV:</span>
         <AnimatePresence>
-          {recent.map((num, i) => (
+          {recent.map((num: number, i: number) => (
             <motion.div
               key={num}
               initial={{ opacity: 0, x: -20, scale: 0 }}
