@@ -34,6 +34,14 @@ export async function registerRoutes(
             break;
           }
 
+          case 'create_solo_room': {
+            const roomCode = await gameManager.createSoloRoom(sessionId, parsed.playerName, ws);
+            ws.send(JSON.stringify({ type: 'room_created', roomCode }));
+            await gameManager.broadcastGameState(roomCode);
+            log(`Solo room created: ${roomCode}`, 'game');
+            break;
+          }
+
           case 'join_room': {
             const success = await gameManager.joinRoom(parsed.roomCode, sessionId, parsed.playerName, ws);
             if (success) {

@@ -45,6 +45,55 @@ export class GameManager {
     return roomCode;
   }
 
+  async createSoloRoom(hostSessionId: string, hostName: string, ws: WebSocket): Promise<string> {
+    const roomCode = this.generateRoomCode();
+    
+    const room = await storage.createGameRoom({
+      roomCode,
+      hostId: hostSessionId,
+      status: 'lobby',
+      mode: 'solo',
+      currentNumber: null,
+      calledNumbers: [],
+      callIntervalMs: 4000,
+    });
+
+    // Add host as player
+    const ticketData = this.generateTicket();
+    await storage.addPlayerToRoom({
+      roomId: room.id,
+      sessionId: hostSessionId,
+      name: hostName,
+      isBot: false,
+      isHost: true,
+      ticketData,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${hostName}`,
+    });
+
+    // Add 2 bots
+    const botNames = ['Lucky Bot', 'Clever Bot'];
+    for (const botName of botNames) {
+      const botTicketData = this.generateTicket();
+      await storage.addPlayerToRoom({
+        roomId: room.id,
+        sessionId: `bot-${Date.now()}-${Math.random()}`,
+        name: botName,
+        isBot: true,
+        isHost: false,
+        ticketData: botTicketData,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${botName}`,
+      });
+    }
+
+    // Create game session
+    this.sessions.set(roomCode, {
+      roomCode,
+      players: new Map([[hostSessionId, ws]]),
+    });
+
+    return roomCode;
+  }
+
   async joinRoom(roomCode: string, sessionId: string, playerName: string, ws: WebSocket): Promise<boolean> {
     const room = await storage.getGameRoom(roomCode);
     if (!room || room.status !== 'lobby') {

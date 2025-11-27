@@ -19,6 +19,7 @@ const GameContext = createContext<{
   connected: boolean;
   selectMode: (mode: GameMode) => void;
   createRoom: (playerName: string) => void;
+  createSoloRoom: (playerName: string) => void;
   joinRoom: (roomCode: string, playerName: string) => void;
   startGame: () => void;
   markCell: (playerId: string, ticketIndex: number, rowIndex: number, colIndex: number) => void;
@@ -86,6 +87,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     send({ type: 'create_room', playerName });
   };
 
+  const createSoloRoom = (playerName: string) => {
+    send({ type: 'create_solo_room', playerName });
+  };
+
   const joinRoom = (roomCode: string, playerName: string) => {
     send({ type: 'join_room', roomCode, playerName });
   };
@@ -128,6 +133,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       connected,
       selectMode,
       createRoom,
+      createSoloRoom,
       joinRoom,
       startGame,
       markCell,

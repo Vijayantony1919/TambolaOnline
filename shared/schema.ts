@@ -56,6 +56,10 @@ export const wsMessageSchema = z.discriminatedUnion('type', [
     playerName: z.string(),
   }),
   z.object({
+    type: z.literal('create_solo_room'),
+    playerName: z.string(),
+  }),
+  z.object({
     type: z.literal('start_game'),
     roomCode: z.string(),
   }),

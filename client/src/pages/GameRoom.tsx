@@ -1,7 +1,7 @@
 import { useGame } from '@/lib/game-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Trophy, Users, Play, Clock, ArrowLeft, Copy, Wifi, WifiOff } from 'lucide-react';
+import { Trophy, Users, Play, Clock, ArrowLeft, Copy, Wifi, WifiOff, Bot } from 'lucide-react';
 import { Ticket } from '@/components/game/Ticket';
 import { Board } from '@/components/game/Board';
 import { CurrentCall } from '@/components/game/CurrentCall';
@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 
 export function GameRoom() {
-  const { localState, room, players, myPlayer, connected, selectMode, createRoom, joinRoom, startGame, markCell, reset } = useGame();
+  const { localState, room, players, myPlayer, connected, selectMode, createRoom, createSoloRoom, joinRoom, startGame, markCell, reset } = useGame();
   const [joinCode, setJoinCode] = useState('');
   const [playerName, setPlayerName] = useState('Player');
 
@@ -25,23 +25,45 @@ export function GameRoom() {
               {connected ? (
                 <><Wifi className="w-4 h-4 text-green-500" /> <span className="text-green-600">Connected</span></>
               ) : (
-                <><WifiOff className="w-4 h-4 text-red-500" /> <span className="text-red-600">Disconnected</span></>
+                <><WifiOff className="w-4 h-4 text-red-500" /> <span className="text-red-600">Connecting...</span></>
               )}
             </div>
           </div>
 
-          <div className="grid gap-4">
-            <Button 
-              size="lg" 
-              className="h-24 text-xl font-bold rounded-2xl shadow-md hover:shadow-xl transition-all hover:-translate-y-1 bg-brand-dark text-white hover:bg-brand-dark/90"
-              onClick={() => selectMode('friends')}
-              disabled={!connected}
-            >
-               <div className="flex flex-col items-center gap-2">
-                <Users className="w-8 h-8" />
-                <span>Play with Friends</span>
-              </div>
-            </Button>
+          <div className="bg-white p-6 rounded-3xl shadow-xl border border-border space-y-4">
+            <Input 
+              placeholder="Enter Your Name" 
+              className="h-14 text-center text-lg font-medium"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+            />
+
+            <div className="grid gap-3">
+              <Button 
+                size="lg" 
+                className="h-20 text-lg font-bold rounded-2xl shadow-md hover:shadow-xl transition-all hover:-translate-y-1"
+                onClick={() => createSoloRoom(playerName)}
+                disabled={!connected || !playerName.trim()}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <Bot className="w-6 h-6" />
+                  <span>Play Solo (vs 2 Bots)</span>
+                </div>
+              </Button>
+
+              <Button 
+                size="lg" 
+                variant="secondary"
+                className="h-20 text-lg font-bold rounded-2xl shadow-md hover:shadow-xl transition-all hover:-translate-y-1 bg-brand-dark text-white hover:bg-brand-dark/90"
+                onClick={() => selectMode('friends')}
+                disabled={!connected}
+              >
+                 <div className="flex flex-col items-center gap-1">
+                  <Users className="w-6 h-6" />
+                  <span>Play with Friends</span>
+                </div>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -63,13 +85,6 @@ export function GameRoom() {
            </div>
 
            <div className="bg-white p-6 rounded-3xl shadow-xl border border-border space-y-6">
-              <Input 
-                placeholder="Your Name" 
-                className="h-12 text-center text-lg"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-              />
-
               <Button 
                 size="lg" 
                 className="w-full h-14 text-lg font-bold"
