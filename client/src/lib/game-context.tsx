@@ -141,6 +141,48 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [state.status, state.callIntervalMs]);
 
+  // Multiplayer Simulation Effect
+  useEffect(() => {
+    // If we are in a lobby in 'friends' mode
+    if (state.status === 'lobby' && state.mode === 'friends') {
+      
+      // SCENARIO 1: YOU ARE HOST (Created Room)
+      // Simulate players joining you
+      if (state.hostId === 'user') {
+         const timeouts: NodeJS.Timeout[] = [];
+         
+         // Friend 1 joins after 2 seconds
+         if (state.players.length === 1) {
+           timeouts.push(setTimeout(() => {
+             dispatch({ type: 'ADD_BOT' }); // Re-using add bot to sim friend
+             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'); // Pop sound
+             audio.volume = 0.5;
+             audio.play().catch(() => {});
+           }, 2500));
+         }
+         
+         // Friend 2 joins after 5 seconds
+         if (state.players.length <= 2) {
+            timeouts.push(setTimeout(() => {
+             dispatch({ type: 'ADD_BOT' });
+             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
+             audio.volume = 0.5;
+             audio.play().catch(() => {});
+           }, 5000));
+         }
+
+         return () => timeouts.forEach(clearTimeout);
+      }
+      
+      // SCENARIO 2: YOU JOINED SOMEONE (Joined Room)
+      // Simulate that a Host is already there if we are alone
+      if (state.hostId === 'other' && state.players.length === 1) {
+         // Immediate effect to show host
+         dispatch({ type: 'ADD_BOT' }); // Simulating the host
+      }
+    }
+  }, [state.status, state.mode, state.players.length, state.hostId]);
+
   // Voice Synthesis Effect
   useEffect(() => {
     if (state.currentNumber && state.status === 'running') {
