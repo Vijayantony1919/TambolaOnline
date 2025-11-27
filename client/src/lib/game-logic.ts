@@ -16,10 +16,14 @@ export type Player = {
   avatar?: string;
 };
 
-export type GameStatus = 'lobby' | 'countdown' | 'running' | 'paused' | 'ended';
+export type GameStatus = 'lobby' | 'countdown' | 'running' | 'paused' | 'ended' | 'mode-selection' | 'create-room' | 'join-room';
+
+export type GameMode = 'solo' | 'friends';
 
 export type GameState = {
   status: GameStatus;
+  mode: GameMode;
+  roomCode: string | null;
   currentNumber: number | null;
   calledNumbers: number[];
   players: Player[];
@@ -124,10 +128,12 @@ export function generateBotPlayer(id: string, name: string): Player {
 }
 
 export const INITIAL_GAME_STATE: GameState = {
-  status: 'lobby',
+  status: 'mode-selection',
+  mode: 'solo',
+  roomCode: null,
   currentNumber: null,
   calledNumbers: [],
   players: [],
   hostId: 'user',
-  callIntervalMs: 2500, // 2.5 seconds per call
+  callIntervalMs: 4000, // Slowed down to 4 seconds per call
 };

@@ -2,6 +2,9 @@ import React, { createContext, useContext, useReducer, useEffect, useCallback } 
 import { GameState, GameStatus, Player, generateTicket, generateBotPlayer, INITIAL_GAME_STATE } from './game-logic';
 
 type Action =
+  | { type: 'SELECT_MODE'; mode: 'solo' | 'friends' }
+  | { type: 'CREATE_ROOM' }
+  | { type: 'JOIN_ROOM'; code: string }
   | { type: 'START_GAME' }
   | { type: 'TICK' } // Timer tick for drawing numbers
   | { type: 'MARK_CELL'; playerId: string; ticketIndex: number; rowIndex: number; colIndex: number }
@@ -15,6 +18,29 @@ const GameContext = createContext<{
 
 function gameReducer(state: GameState, action: Action): GameState {
   switch (action.type) {
+    case 'SELECT_MODE':
+      return {
+        ...state,
+        mode: action.mode,
+        status: action.mode === 'solo' ? 'lobby' : 'create-room', // Simplify: friends mode goes to create/join choice
+      };
+    
+    case 'CREATE_ROOM':
+      return {
+        ...state,
+        status: 'lobby',
+        roomCode: Math.floor(1000 + Math.random() * 9000).toString(),
+        hostId: 'user',
+      };
+
+    case 'JOIN_ROOM':
+      return {
+        ...state,
+        status: 'lobby',
+        roomCode: action.code,
+        hostId: 'other', // In a real app this would be dynamic
+      };
+
     case 'START_GAME':
       return {
         ...state,
@@ -114,6 +140,35 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearInterval(interval);
   }, [state.status, state.callIntervalMs]);
+
+  // Voice Synthesis Effect
+  useEffect(() => {
+    if (state.currentNumber && state.status === 'running') {
+      const text = state.currentNumber.toString();
+      
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Attempt to select a female voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(
+        v => v.name.includes('Google US English') || 
+             v.name.includes('Samantha') || 
+             v.name.includes('Female')
+      );
+      
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+      
+      utterance.rate = 0.8; // Slower rate
+      utterance.pitch = 1.1; // Slightly higher pitch often sounds friendlier
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [state.currentNumber, state.status]);
 
   return (
     <GameContext.Provider value={{ state, dispatch }}>
